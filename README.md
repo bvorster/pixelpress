@@ -43,6 +43,8 @@ Some limits you might hit:
 - **Windows can't write HEIC.** The free HEIC encoders are GPL-licensed, so the Windows build only reads HEIC.
   It can read your iPhone photos and convert them to anything else.
 - **HDR is lost when resizing.** HDR photos are saved as standard range once you resize them.
+- **AVIF output on the Mac depends on your macOS version.** It shows up in the format list only when your
+  version of macOS can write AVIF.
 - **WebP on the Mac needs `cwebp`.** macOS can't write WebP on its own, so Pixelpress uses
   `cwebp` if you have it: `brew install webp`.
 - **TIFF metadata on Windows is partial.** TIFFs keep camera and date tags, but not GPS.

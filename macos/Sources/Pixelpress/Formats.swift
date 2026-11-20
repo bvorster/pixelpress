@@ -1,10 +1,17 @@
 import Foundation
+import ImageIO
 import UniformTypeIdentifiers
 
 enum OutputFormat: String, CaseIterable, Identifiable, Codable {
     case jpeg, png, heic, avif, webp, tiff, gif, pdf, jp2, heics, exr, psd, bmp, tga, pbm, ico, icns, dds, ktx, astc, pvr
 
     var id: String { rawValue }
+
+    /// Formats this Mac can write. Writers vary by macOS version (AVIF output needs a recent one).
+    static let available: [OutputFormat] = {
+        let writable = Set((CGImageDestinationCopyTypeIdentifiers() as? [String]) ?? [])
+        return allCases.filter { format in format.imageIOType.map(writable.contains) ?? true }
+    }()
 
     var label: String {
         switch self {
@@ -109,7 +116,8 @@ struct Preferences: Codable, Equatable {
 
     static func load() -> Preferences {
         guard let data = UserDefaults.standard.data(forKey: key),
-              let prefs = try? JSONDecoder().decode(Preferences.self, from: data) else { return Preferences() }
+              var prefs = try? JSONDecoder().decode(Preferences.self, from: data) else { return Preferences() }
+        if !OutputFormat.available.contains(prefs.settings.format) { prefs.settings.format = .jpeg }
         return prefs
     }
 

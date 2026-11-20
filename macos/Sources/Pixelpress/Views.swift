@@ -238,7 +238,7 @@ struct SettingsPanel: View {
         Form {
             Section("Output") {
                 Picker("Format", selection: $state.prefs.settings.format) {
-                    ForEach(OutputFormat.allCases) { Text($0.label).tag($0) }
+                    ForEach(OutputFormat.available) { Text($0.label).tag($0) }
                 }
                 if settings.format.supportsQuality {
                     VStack(alignment: .leading, spacing: 4) {

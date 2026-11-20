@@ -26,6 +26,12 @@ def _attach_console() -> None:
         import io
 
         sys.stdout = sys.stderr = io.StringIO()
+    # Windows consoles default to a legacy code page that can't print → or −.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
 
 
 def run(argv: list[str]) -> int:

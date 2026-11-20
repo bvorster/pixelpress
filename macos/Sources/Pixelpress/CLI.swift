@@ -33,12 +33,13 @@ enum CLI {
             case "-h", "--help":
                 print(usage); return 0
             case "--list-formats":
-                for f in OutputFormat.allCases { print("\(f.rawValue.padding(toLength: 6, withPad: " ", startingAt: 0)) \(f.label)") }
+                for f in OutputFormat.available { print("\(f.rawValue.padding(toLength: 6, withPad: " ", startingAt: 0)) \(f.label)") }
                 return 0
             case "-f", "--format":
                 guard let v = value(), let f = OutputFormat(rawValue: v.lowercased() == "jpg" ? "jpeg" : v.lowercased()) else {
                     fail("unknown format; try --list-formats"); return 2
                 }
+                guard OutputFormat.available.contains(f) else { fail("this version of macOS can't write \(f.label)"); return 2 }
                 settings.format = f
             case "-q", "--quality":
                 guard let v = value(), let q = Double(v), (0...100).contains(q) else { fail("quality must be 0-100"); return 2 }
