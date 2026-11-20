@@ -90,8 +90,13 @@ final class AppState: ObservableObject {
         formatter.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("Pixelpress-pasted", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let url = dir.appendingPathComponent("Pasted Image \(formatter.string(from: Date())).png")
-        if (try? png.write(to: url)) != nil { add([url]) }
+        let stem = "Pasted Image \(formatter.string(from: Date()))"
+        var url = dir.appendingPathComponent(stem).appendingPathExtension("png")
+        var n = 2
+        while FileManager.default.fileExists(atPath: url.path) {   // two pastes in the same second
+            url = dir.appendingPathComponent("\(stem) \(n)").appendingPathExtension("png"); n += 1
+        }
+        if (try? png.write(to: url, options: .withoutOverwriting)) != nil { add([url]) }
     }
 
     func remove(_ item: ImageItem) { items.removeAll { $0.id == item.id } }

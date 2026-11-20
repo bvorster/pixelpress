@@ -24,7 +24,9 @@ try:
 except Exception:  # pragma: no cover - optional
     rawpy = None
 
-Image.MAX_IMAGE_PIXELS = None  # large photos and scans are normal input here
+# Large photos and scans are normal input, so the cap sits far above any camera (about 22,000 × 22,000),
+# but a crafted "decompression bomb" file still can't make Pixelpress allocate unlimited memory.
+Image.MAX_IMAGE_PIXELS = 500_000_000
 
 RAW_EXTENSIONS = {
     ".3fr", ".arw", ".cr2", ".cr3", ".crw", ".dcr", ".dng", ".erf", ".fff", ".iiq", ".mos", ".mrw",
@@ -207,8 +209,16 @@ def _square(im: Image.Image, size: int) -> Image.Image:
     return canvas
 
 
-def _prepare(frame: Image.Image, size: tuple[int, int], fmt: Format) -> Image.Image:
+# Keys in Image.info that some Pillow writers copy into the output. Only these survive "remove metadata";
+# everything else (comments, XMP, EXIF, text chunks) is dropped so it can't leak into the converted file.
+_INFO_KEEP = {"transparency", "duration", "loop", "background", "dpi", "icc_profile"}
+
+
+def _prepare(frame: Image.Image, size: tuple[int, int], fmt: Format, keep_metadata: bool = False) -> Image.Image:
     im = _normalise(frame)
+    if not keep_metadata:
+        im = im if im is not frame else im.copy()
+        im.info = {k: v for k, v in im.info.items() if k in _INFO_KEEP}
     if im.size != size:
         im = im.resize(size, Image.Resampling.LANCZOS)
     if not fmt.alpha:
@@ -227,12 +237,12 @@ def convert(src: Path, dst: Path, s: Settings) -> None:
         size = target_size(*source.size, s)
         frames, durations = [], []
         for frame in ImageSequence.Iterator(source):
-            frames.append(_prepare(frame.copy(), size, fmt))
+            frames.append(_prepare(frame.copy(), size, fmt, s.keep_metadata))
             durations.append(int(frame.info.get("duration", 100)) or 100)
     else:
         upright = ImageOps.exif_transpose(source)
         size = target_size(*upright.size, s)
-        frames, durations = [_prepare(upright, size, fmt)], []
+        frames, durations = [_prepare(upright, size, fmt, s.keep_metadata)], []
 
     exif = None
     if s.keep_metadata and fmt.metadata:
@@ -274,20 +284,32 @@ def convert(src: Path, dst: Path, s: Settings) -> None:
         options.update(save_all=True, append_images=frames[1:], duration=durations, loop=0)
 
     dst.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        frames[0].save(dst, fmt.pil, **options)
-    except Exception:
+    # "x" mode fails instead of replacing a file that appeared after the output name was picked.
+    with open(dst, "xb") as fh:
         try:
-            dst.unlink()
-        except OSError:
-            pass
-        raise
+            frames[0].save(fh, fmt.pil, **options)
+        except Exception:
+            fh.close()
+            try:
+                dst.unlink()
+            except OSError:
+                pass
+            raise
+
+
+_private_temp: Path | None = None
+
+
+def private_temp_dir() -> Path:
+    """A temp folder only this user can read, made fresh for each run (shared /tmp on Linux isn't safe)."""
+    global _private_temp
+    if _private_temp is None or not _private_temp.is_dir():
+        _private_temp = Path(tempfile.mkdtemp(prefix="Pixelpress-"))
+    return _private_temp
 
 
 def preview(src: Path, s: Settings) -> Path:
-    folder = Path(tempfile.gettempdir()) / "Pixelpress-preview"
-    folder.mkdir(parents=True, exist_ok=True)
-    out = folder / f"{uuid.uuid4().hex}.{FORMATS[s.format].ext}"
+    out = private_temp_dir() / f"{uuid.uuid4().hex}.{FORMATS[s.format].ext}"
     convert(src, out, s)
     return out
 

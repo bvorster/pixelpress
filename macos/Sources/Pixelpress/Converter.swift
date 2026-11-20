@@ -295,7 +295,9 @@ enum Converter {
         var candidates: [URL] = []
         if let bundled = Bundle.main.resourceURL?.appendingPathComponent("bin/\(name)") { candidates.append(bundled) }
         let path = ProcessInfo.processInfo.environment["PATH"] ?? ""
-        let dirs = ["/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin"] + path.split(separator: ":").map(String.init)
+        // Only absolute PATH entries: a "." or relative entry would run whatever "cwebp" sits in the current folder.
+        let dirs = ["/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin"]
+            + path.split(separator: ":").map(String.init).filter { $0.hasPrefix("/") }
         candidates += dirs.map { URL(fileURLWithPath: $0).appendingPathComponent(name) }
         return candidates.first { FileManager.default.isExecutableFile(atPath: $0.path) }
     }
