@@ -1,0 +1,89 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: windows
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt pyinstaller
+      - name: Test the converter
+        run: python tests/smoke.py
+      - name: Build Pixelpress.exe
+        run: >
+          python -m PyInstaller --noconfirm --clean --onefile --windowed
+          --name Pixelpress --icon assets\pixelpress.ico
+          --add-data "assets\pixelpress.png;assets"
+          --version-file version_info.txt
+          --collect-all pi_heif --collect-all rawpy
+          run.py
+      - name: Test the built .exe
+        shell: pwsh
+        run: |
+          python tests/smoke.py --make-only smoke-in
+          $p = Start-Process -FilePath dist\Pixelpress.exe -ArgumentList 'convert','-f','webp','-o','smoke-out','smoke-in' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Pixelpress.exe exited with $($p.ExitCode)" }
+          if (-not (Test-Path smoke-out\smoke-in\photo.webp)) { throw "Pixelpress.exe produced no output" }
+          Move-Item dist\Pixelpress.exe dist\Pixelpress-Windows.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Pixelpress-Windows
+          path: windows/dist/Pixelpress-Windows.exe
+
+  macos:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Pixelpress.app and DMG
+        run: macos/make-dmg.sh
+      - name: Test the built app
+        run: |
+          mkdir -p smoke
+          sips -s format png /System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/GenericDocumentIcon.icns --out smoke/icon.png >/dev/null
+          macos/dist/Pixelpress.app/Contents/MacOS/Pixelpress convert -f avif -o smoke/out smoke/icon.png
+          test -f smoke/out/icon.avif
+          mv macos/dist/Pixelpress.dmg macos/dist/Pixelpress-macOS.dmg
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Pixelpress-macOS
+          path: macos/dist/Pixelpress-macOS.dmg
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > notes.md <<'NOTES'
+          **Downloads**
+          - macOS 13+: `Pixelpress-macOS.dmg`. Open it, drag Pixelpress into Applications, then right-click → Open the first time.
+          - Windows 10/11: `Pixelpress-Windows.exe`. If SmartScreen appears, click More info → Run anyway.
+
+          The builds aren't signed with a paid developer certificate, which is why your system asks you to confirm the first launch.
+          NOTES
+          gh release create "$GITHUB_REF_NAME" out/Pixelpress-Windows.exe out/Pixelpress-macOS.dmg \
+            --repo "$GITHUB_REPOSITORY" --title "Pixelpress ${GITHUB_REF_NAME#v}" \
+            --notes-file notes.md --generate-notes

@@ -1,0 +1,11 @@
+.DS_Store
+macos/.build/
+macos/dist/
+windows/build/
+windows/dist/
+windows/*.spec
+__pycache__/
+*.pyc
+.venv/
+smoke-in/
+smoke-out/

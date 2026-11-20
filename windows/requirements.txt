@@ -1,0 +1,4 @@
+PySide6-Essentials>=6.7
+Pillow>=11.3
+pi-heif>=0.22
+rawpy>=0.24
