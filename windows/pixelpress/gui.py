@@ -4,7 +4,6 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
-import tempfile
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -39,7 +38,10 @@ def pil_to_qimage(im) -> QImage:
 
 def reveal(path: Path) -> None:
     if sys.platform == "win32":
-        subprocess.Popen(["explorer", "/select,", str(path)])
+        # Full path: a bare "explorer" would also be looked up in the current folder, so a planted
+        # explorer.exe next to Pixelpress.exe (e.g. in Downloads) could run instead of Windows' own.
+        explorer = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "explorer.exe"
+        subprocess.Popen([str(explorer), "/select,", str(path)])
     elif sys.platform == "darwin":
         subprocess.Popen(["open", "-R", str(path)])
     else:
@@ -773,9 +775,11 @@ class MainWindow(QMainWindow):
             self.add_paths([Path(u.toLocalFile()) for u in mime.urls() if u.isLocalFile()])
         elif mime.hasImage():
             image = QApplication.clipboard().image()
-            folder = Path(tempfile.gettempdir()) / "Pixelpress-pasted"
-            folder.mkdir(parents=True, exist_ok=True)
-            path = folder / f"Pasted Image {datetime.now():%Y-%m-%d at %H.%M.%S}.png"
+            folder = cv.private_temp_dir()
+            stem = f"Pasted Image {datetime.now():%Y-%m-%d at %H.%M.%S}"
+            path, n = folder / f"{stem}.png", 2
+            while path.exists():   # two pastes in the same second
+                path, n = folder / f"{stem} {n}.png", n + 1
             if image.save(str(path), "PNG"):
                 self.add_paths([path])
         else:
